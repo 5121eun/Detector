@@ -15,26 +15,10 @@
 
 #include <codecvt>
 
-
-
-// Global variables
-
-// The main window class name.
-static TCHAR szWindowClass[] = _T("DesktopApp");
-
-// The string that appears in the application's title bar.
-static TCHAR szTitle[] = _T("Detector");
-
-// Stored instance handle for use in Win32 API calls such as FindResource
-HINSTANCE hInst;
-
-// Forward declarations of functions included in this code module:
-LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
-
-#define MODEL_PATH "detr.pt"
-
-void processing(cv::Mat src) {
-    std::string keys[] = {
+class Detector {
+private:
+    torch::jit::script::Module model;
+    std::string keys[91] = {
      "N/A",
      "person",
      "bicycle",
@@ -128,33 +112,33 @@ void processing(cv::Mat src) {
      "toothbrush"
     };
 
-    cv::Mat reszied_img;
-    cv::cvtColor(src, src, cv::COLOR_RGBA2RGB);
-    cv::resize(src, reszied_img, cv::Size(800, 800), 0, 0, 1);
+    std::vector<torch::jit::IValue> preprocessing(cv::Mat src) {
+        cv::Mat reszied_img;
+        cv::cvtColor(src, src, cv::COLOR_RGBA2RGB);
+        cv::resize(src, reszied_img, cv::Size(800, 800), 0, 0, 1);
 
-    auto input = torch::from_blob(reszied_img.data, { reszied_img.rows, reszied_img.cols, reszied_img.channels() }, torch::kUInt8);
+        auto input = torch::from_blob(reszied_img.data, { reszied_img.rows, reszied_img.cols, reszied_img.channels() }, torch::kUInt8);
 
-    auto mean = torch::tensor({ { 0.485, 0.456, 0.406 } });
-    auto std = torch::tensor({ { 0.229, 0.224, 0.225 } });
+        auto mean = torch::tensor({ { 0.485, 0.456, 0.406 } });
+        auto std = torch::tensor({ { 0.229, 0.224, 0.225 } });
 
-    
-    input = input / 255;
-    input = (input - mean) / std;
 
-    input = input.permute({ 2, 0, 1 }).unsqueeze(0).type_as(torch::ones({ 1 }));
+        input = input / 255;
+        input = (input - mean) / std;
 
-    try {
-        torch::jit::script::Module module = torch::jit::load("detr.pt");
-
+        input = input.permute({ 2, 0, 1 }).unsqueeze(0).type_as(torch::ones({ 1 }));
         std::vector<torch::jit::IValue> inputs;
         inputs.push_back(input);
 
-        auto output = module.forward(inputs);
-        auto logits = output.toTuple()->elements()[0].toTensor();
-        auto bbox = output.toTuple()->elements()[1].toTensor();
+        return inputs;
+    }
+
+    void draw(cv::Mat src, at::Tensor logits, at::Tensor bboxes) {
+        int width = src.cols;
+        int height = src.rows;
 
         for (int i = 0; i < 100; i++) {
-            auto cls_idx = logits[0][i].argmax().item().toInt();
+            auto cls_idx = logits[i].argmax().item().toInt();
 
             if (cls_idx == 91) {
                 continue;
@@ -163,25 +147,60 @@ void processing(cv::Mat src) {
             auto cls = keys[cls_idx];
             std::cout << cls << "\n";
 
-            float center_x = bbox[0][i][0].item().toFloat() * src.cols;
-            float center_y = bbox[0][i][1].item().toFloat() * src.rows;
+            float center_x = bboxes[i][0].item().toFloat() * width;
+            float center_y = bboxes[i][1].item().toFloat() * height;
 
-            float w = bbox[0][i][2].item().toFloat() * src.cols;
-            float h = bbox[0][i][3].item().toFloat() * src.rows;
+            float w = bboxes[i][2].item().toFloat() * width;
+            float h = bboxes[i][3].item().toFloat() * height;
 
             cv::putText(src, cls, cv::Point2f(center_x - (w / 2), center_y - (h / 2)), 0, 1, cv::Scalar(255), 2);
             cv::rectangle(src, cv::Point2f(center_x - (w / 2), center_y - (h / 2)), cv::Point2f(center_x + (w / 2), center_y + (h / 2)), cv::Scalar(255), 2);
 
         }
-
-        cv::imshow("image", src);
-        cv::waitKey(0);
     }
-    catch (const c10::Error& e) {
-        std::cerr << e.what();
-    }
-}
 
+public:
+    Detector() {
+        model = torch::jit::load("detr.pt");
+    }
+
+    cv::Mat detect(cv::Mat src) {
+        std::vector<torch::jit::IValue> inputs = preprocessing(src);
+
+        try {
+
+            auto output = model.forward(inputs);
+            auto logits = output.toTuple()->elements()[0].toTensor()[0];
+            auto bboxes = output.toTuple()->elements()[1].toTensor()[0];
+
+            draw(src, logits, bboxes);
+
+            cv::imshow("image", src);
+            cv::waitKey(0);
+        }
+        catch (const c10::Error& e) {
+            std::cerr << e.what();
+        }
+        return src;
+    }
+};
+// Global variables
+
+// The main window class name.
+static TCHAR szWindowClass[] = _T("DesktopApp");
+
+// The string that appears in the application's title bar.
+static TCHAR szTitle[] = _T("Detector");
+
+// Stored instance handle for use in Win32 API calls such as FindResource
+HINSTANCE hInst;
+
+// Forward declarations of functions included in this code module:
+LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+
+Detector detector = Detector();
+
+#define MODEL_PATH "detr.pt"
 
 int WINAPI WinMain(
     _In_ HINSTANCE hInstance,
@@ -285,7 +304,7 @@ void screenshot()
     cv::Mat mat(h, w, CV_8UC4);
     BITMAPINFOHEADER bi = { sizeof(bi), w, -h, 1, 32, BI_RGB };
     GetDIBits(hdc, hbitmap, 0, h, mat.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
-    processing(mat);
+    detector.detect(mat);
 
     SelectObject(memdc, oldbmp);
     DeleteDC(memdc);
