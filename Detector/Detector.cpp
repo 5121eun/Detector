@@ -292,6 +292,37 @@ int WINAPI WinMain(
     return (int)msg.wParam;
 }
 /*
+void screenshot(HWND hWnd)
+{
+    auto w = GetSystemMetrics(SM_CXFULLSCREEN);
+    auto h = GetSystemMetrics(SM_CYFULLSCREEN);
+
+    HDC hdcScreen = GetDC(NULL);
+    HDC hdcWindow = GetDC(hWnd);
+
+    HDC hdcMemDC = CreateCompatibleDC(hdcWindow);
+    
+    StretchBlt(hdcWindow,
+        0, 0,
+        w, h,
+        hdcScreen,
+        0, 0,
+        GetSystemMetrics(SM_CXSCREEN),
+        GetSystemMetrics(SM_CYSCREEN),
+        SRCCOPY);
+    
+    HBITMAP hbmScreen = CreateCompatibleBitmap(hdcScreen, w, h);
+
+    cv::Mat mat(w, h, CV_8UC4);
+    BITMAPINFOHEADER bi = { sizeof(bi), w, -h, 1, 32, BI_RGB };
+    GetDIBits(hdcScreen, hbmScreen, 0, h, mat.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+
+    cv::imshow("image", mat);
+    cv::waitKey(0);
+
+
+}*/
+
 void screenshot(HDC hdc2)
 {
     auto w = GetSystemMetrics(SM_CXFULLSCREEN);
@@ -300,7 +331,6 @@ void screenshot(HDC hdc2)
     auto hbitmap = CreateCompatibleBitmap(hdc, w, h);
     auto memdc = CreateCompatibleDC(hdc);
     auto oldbmp = SelectObject(memdc, hbitmap);
-    //auto hdcWindow = GetDC(hWnd);
     BitBlt(memdc, 0, 0, w, h, hdc, 0, 0, SRCCOPY);
 
     cv::Mat mat(h, w, CV_8UC4);
@@ -311,132 +341,14 @@ void screenshot(HDC hdc2)
     cv::imshow("image", result);
     cv::waitKey(0);
 
-    auto dc = GetDC(nullptr);
-    //HBITMAP bitmap = CreateDIBitmap(dc, nullptr, CBM_INIT, result.data, nullptr, DIB_RGB_COLORS);
-    StretchBlt(hdc2,
-        0, 0,
-        450, 400,
-        dc,
-        0, 0,
-        GetSystemMetrics(SM_CXSCREEN),
-        GetSystemMetrics(SM_CYSCREEN),
-        SRCCOPY);
+    SetDIBitsToDevice(hdc2, 0, 0, result.cols, result.rows, 0, 0, 0, result.rows,
+        result.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
 
     SelectObject(memdc, oldbmp);
     DeleteDC(memdc);
     DeleteObject(hbitmap);
     ReleaseDC(HWND_DESKTOP, hdc);
 }
-
-
-void screenshot(HDC hdc)
-{
-    auto w = GetSystemMetrics(SM_CXFULLSCREEN);
-    auto h = GetSystemMetrics(SM_CYFULLSCREEN);
-    auto hdc = GetDC(HWND_DESKTOP);
-    auto hbitmap = CreateCompatibleBitmap(hdc, w, h);
-    auto memdc = CreateCompatibleDC(hdc);
-    auto oldbmp = SelectObject(memdc, hbitmap);
-    BitBlt(memdc, 0, 0, w, h, hdc, 0, 0, SRCCOPY);
-
-    cv::Mat mat(h, w, CV_8UC4);
-    BITMAPINFOHEADER bi = { sizeof(bi), w, -h, 1, 32, BI_RGB };
-    GetDIBits(hdc, hbitmap, 0, h, mat.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
-    detector.detect(mat);
-
-    SelectObject(memdc, oldbmp);
-    DeleteDC(memdc);
-    DeleteObject(hbitmap);
-    ReleaseDC(HWND_DESKTOP, hdc);
-}*/
-
-
-int CaptureAnImage(HWND hWnd)
-{
-    HDC hdcScreen;
-    HDC hdcWindow;
-    HDC hdcMemDC = NULL;
-    HBITMAP hbmScreen = NULL;
-    BITMAP bmpScreen;
-    DWORD dwBytesWritten = 0;
-    DWORD dwSizeofDIB = 0;
-    HANDLE hFile = NULL;
-    char* lpbitmap = NULL;
-    HANDLE hDIB = NULL;
-    DWORD dwBmpSize = 0;
-
-    // Retrieve the handle to a display device context for the client 
-    // area of the window. 
-    hdcScreen = GetDC(NULL);
-    hdcWindow = GetDC(hWnd);
-
-    // Create a compatible DC, which is used in a BitBlt from the window DC.
-    hdcMemDC = CreateCompatibleDC(hdcWindow);
-
-    if (!hdcMemDC)
-    {
-        MessageBox(hWnd, L"CreateCompatibleDC has failed", L"Failed", MB_OK);
-        goto done;
-    }
-
-    // Get the client area for size calculation.
-    RECT rcClient;
-    GetClientRect(hWnd, &rcClient);
-
-    // This is the best stretch mode.
-    SetStretchBltMode(hdcWindow, HALFTONE);
-
-    // The source DC is the entire screen, and the destination DC is the current window (HWND).
-    if (!StretchBlt(hdcWindow,
-        0, 0,
-        rcClient.right, rcClient.bottom,
-        hdcScreen,
-        0, 0,
-        GetSystemMetrics(SM_CXSCREEN),
-        GetSystemMetrics(SM_CYSCREEN),
-        SRCCOPY))
-    {
-        MessageBox(hWnd, L"StretchBlt has failed", L"Failed", MB_OK);
-        goto done;
-    }
-    /*
-    // Create a compatible bitmap from the Window DC.
-    hbmScreen = CreateCompatibleBitmap(hdcWindow, rcClient.right - rcClient.left, rcClient.bottom - rcClient.top);
-
-    if (!hbmScreen)
-    {
-        MessageBox(hWnd, L"CreateCompatibleBitmap Failed", L"Failed", MB_OK);
-        goto done;
-    }
-
-    // Select the compatible bitmap into the compatible memory DC.
-    SelectObject(hdcMemDC, hbmScreen);
-
-    // Bit block transfer into our compatible memory DC.
-    if (!BitBlt(hdcMemDC,
-        0, 0,
-        rcClient.right - rcClient.left, rcClient.bottom - rcClient.top,
-        hdcWindow,
-        0, 0,
-        SRCCOPY))
-    {
-        MessageBox(hWnd, L"BitBlt has failed", L"Failed", MB_OK);
-        goto done;
-    }
-
-    // Get the BITMAP from the HBITMAP.
-    GetObject(hbmScreen, sizeof(BITMAP), &bmpScreen);
-    */
-
-    // Clean up.
-done:
-    DeleteObject(hbmScreen);
-    DeleteObject(hdcMemDC);
-    ReleaseDC(NULL, hdcScreen);
-    ReleaseDC(hWnd, hdcWindow);
-
-    return 0;
-} 
 
 //  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
 //
@@ -450,21 +362,20 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
     case WM_CREATE:
     {
- 
+        /*
         HANDLE thread = CreateThread(NULL, 0, PaintProc, (LPVOID) hWnd, 0, NULL);
         if (!thread) {
             WaitForSingleObject(thread, INFINITE);
         }
+        */
     }
     break;
     case WM_PAINT:
     {
-        OutputDebugString(L"paint \n");
-
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
-        CaptureAnImage(hWnd);
-        //screenshot(hdc);
+        //CaptureAnImage(hWnd);
+        screenshot(hdc);
         EndPaint(hWnd, &ps);
         
     }
@@ -482,12 +393,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 DWORD WINAPI PaintProc(LPVOID lpParam) {
     while (1) {
-        OutputDebugString(L"thread \n");
-        
         HWND hWnd = (HWND)lpParam;
 
         SendMessage(hWnd, WM_PAINT, NULL, NULL);
-        Sleep(2000);
+        Sleep(30);
     }
     return 0;
 }
