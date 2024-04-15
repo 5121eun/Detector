@@ -15,6 +15,23 @@
 
 #include <codecvt>
 
+// Global variables
+
+// The main window class name.
+static TCHAR szWindowClass[] = _T("DesktopApp");
+
+// The string that appears in the application's title bar.
+static TCHAR szTitle[] = _T("Detector");
+
+// Stored instance handle for use in Win32 API calls such as FindResource
+HINSTANCE hInst;
+
+// Forward declarations of functions included in this code module:
+LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
+DWORD   WINAPI      PaintProc(LPVOID lpParam);
+
+#define MODEL_PATH "detr.pt"
+
 class Detector {
 private:
     torch::jit::script::Module model;
@@ -174,33 +191,17 @@ public:
             auto bboxes = output.toTuple()->elements()[1].toTensor()[0];
 
             draw(src, logits, bboxes);
-
-            cv::imshow("image", src);
-            cv::waitKey(0);
+            return src;
         }
         catch (const c10::Error& e) {
             std::cerr << e.what();
         }
-        return src;
+        
     }
 };
-// Global variables
 
-// The main window class name.
-static TCHAR szWindowClass[] = _T("DesktopApp");
-
-// The string that appears in the application's title bar.
-static TCHAR szTitle[] = _T("Detector");
-
-// Stored instance handle for use in Win32 API calls such as FindResource
-HINSTANCE hInst;
-
-// Forward declarations of functions included in this code module:
-LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
 Detector detector = Detector();
-
-#define MODEL_PATH "detr.pt"
 
 int WINAPI WinMain(
     _In_ HINSTANCE hInstance,
@@ -290,8 +291,45 @@ int WINAPI WinMain(
 
     return (int)msg.wParam;
 }
+/*
+void screenshot(HDC hdc2)
+{
+    auto w = GetSystemMetrics(SM_CXFULLSCREEN);
+    auto h = GetSystemMetrics(SM_CYFULLSCREEN);
+    auto hdc = GetDC(HWND_DESKTOP);
+    auto hbitmap = CreateCompatibleBitmap(hdc, w, h);
+    auto memdc = CreateCompatibleDC(hdc);
+    auto oldbmp = SelectObject(memdc, hbitmap);
+    //auto hdcWindow = GetDC(hWnd);
+    BitBlt(memdc, 0, 0, w, h, hdc, 0, 0, SRCCOPY);
 
-void screenshot()
+    cv::Mat mat(h, w, CV_8UC4);
+    BITMAPINFOHEADER bi = { sizeof(bi), w, -h, 1, 32, BI_RGB };
+    GetDIBits(hdc, hbitmap, 0, h, mat.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+    cv::Mat result = detector.detect(mat);
+
+    cv::imshow("image", result);
+    cv::waitKey(0);
+
+    auto dc = GetDC(nullptr);
+    //HBITMAP bitmap = CreateDIBitmap(dc, nullptr, CBM_INIT, result.data, nullptr, DIB_RGB_COLORS);
+    StretchBlt(hdc2,
+        0, 0,
+        450, 400,
+        dc,
+        0, 0,
+        GetSystemMetrics(SM_CXSCREEN),
+        GetSystemMetrics(SM_CYSCREEN),
+        SRCCOPY);
+
+    SelectObject(memdc, oldbmp);
+    DeleteDC(memdc);
+    DeleteObject(hbitmap);
+    ReleaseDC(HWND_DESKTOP, hdc);
+}
+
+
+void screenshot(HDC hdc)
 {
     auto w = GetSystemMetrics(SM_CXFULLSCREEN);
     auto h = GetSystemMetrics(SM_CYFULLSCREEN);
@@ -310,9 +348,9 @@ void screenshot()
     DeleteDC(memdc);
     DeleteObject(hbitmap);
     ReleaseDC(HWND_DESKTOP, hdc);
-}
+}*/
 
-/*
+
 int CaptureAnImage(HWND hWnd)
 {
     HDC hdcScreen;
@@ -361,7 +399,7 @@ int CaptureAnImage(HWND hWnd)
         MessageBox(hWnd, L"StretchBlt has failed", L"Failed", MB_OK);
         goto done;
     }
-
+    /*
     // Create a compatible bitmap from the Window DC.
     hbmScreen = CreateCompatibleBitmap(hdcWindow, rcClient.right - rcClient.left, rcClient.bottom - rcClient.top);
 
@@ -388,7 +426,7 @@ int CaptureAnImage(HWND hWnd)
 
     // Get the BITMAP from the HBITMAP.
     GetObject(hbmScreen, sizeof(BITMAP), &bmpScreen);
-
+    */
 
     // Clean up.
 done:
@@ -398,7 +436,7 @@ done:
     ReleaseDC(hWnd, hdcWindow);
 
     return 0;
-} */
+} 
 
 //  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
 //
@@ -410,13 +448,25 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     switch (message)
     {
+    case WM_CREATE:
+    {
+ 
+        HANDLE thread = CreateThread(NULL, 0, PaintProc, (LPVOID) hWnd, 0, NULL);
+        if (!thread) {
+            WaitForSingleObject(thread, INFINITE);
+        }
+    }
+    break;
     case WM_PAINT:
     {
+        OutputDebugString(L"paint \n");
+
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
-        //CaptureAnImage(hWnd);
-        screenshot();
+        CaptureAnImage(hWnd);
+        //screenshot(hdc);
         EndPaint(hWnd, &ps);
+        
     }
     break;
     case WM_DESTROY:
@@ -427,5 +477,17 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
     }
 
+    return 0;
+}
+
+DWORD WINAPI PaintProc(LPVOID lpParam) {
+    while (1) {
+        OutputDebugString(L"thread \n");
+        
+        HWND hWnd = (HWND)lpParam;
+
+        SendMessage(hWnd, WM_PAINT, NULL, NULL);
+        Sleep(2000);
+    }
     return 0;
 }
