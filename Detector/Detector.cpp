@@ -185,12 +185,13 @@ public:
         std::vector<torch::jit::IValue> inputs = preprocessing(src);
 
         try {
-
+            
             auto output = model.forward(inputs);
             auto logits = output.toTuple()->elements()[0].toTensor()[0];
             auto bboxes = output.toTuple()->elements()[1].toTensor()[0];
 
             draw(src, logits, bboxes);
+            
             return src;
         }
         catch (const c10::Error& e) {
@@ -291,43 +292,13 @@ int WINAPI WinMain(
 
     return (int)msg.wParam;
 }
-/*
+
 void screenshot(HWND hWnd)
 {
     auto w = GetSystemMetrics(SM_CXFULLSCREEN);
     auto h = GetSystemMetrics(SM_CYFULLSCREEN);
-
-    HDC hdcScreen = GetDC(NULL);
-    HDC hdcWindow = GetDC(hWnd);
-
-    HDC hdcMemDC = CreateCompatibleDC(hdcWindow);
-    
-    StretchBlt(hdcWindow,
-        0, 0,
-        w, h,
-        hdcScreen,
-        0, 0,
-        GetSystemMetrics(SM_CXSCREEN),
-        GetSystemMetrics(SM_CYSCREEN),
-        SRCCOPY);
-    
-    HBITMAP hbmScreen = CreateCompatibleBitmap(hdcScreen, w, h);
-
-    cv::Mat mat(w, h, CV_8UC4);
-    BITMAPINFOHEADER bi = { sizeof(bi), w, -h, 1, 32, BI_RGB };
-    GetDIBits(hdcScreen, hbmScreen, 0, h, mat.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
-
-    cv::imshow("image", mat);
-    cv::waitKey(0);
-
-
-}*/
-
-void screenshot(HDC hdc2)
-{
-    auto w = GetSystemMetrics(SM_CXFULLSCREEN);
-    auto h = GetSystemMetrics(SM_CYFULLSCREEN);
     auto hdc = GetDC(HWND_DESKTOP);
+    auto hdc2 = GetDC(hWnd);
     auto hbitmap = CreateCompatibleBitmap(hdc, w, h);
     auto memdc = CreateCompatibleDC(hdc);
     auto oldbmp = SelectObject(memdc, hbitmap);
@@ -338,16 +309,18 @@ void screenshot(HDC hdc2)
     GetDIBits(hdc, hbitmap, 0, h, mat.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
     cv::Mat result = detector.detect(mat);
 
-    cv::imshow("image", result);
-    cv::waitKey(0);
+    //cv::imshow("image", result);
+    //cv::waitKey(0);
 
     SetDIBitsToDevice(hdc2, 0, 0, result.cols, result.rows, 0, 0, 0, result.rows,
         result.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
 
+Done:
     SelectObject(memdc, oldbmp);
     DeleteDC(memdc);
     DeleteObject(hbitmap);
     ReleaseDC(HWND_DESKTOP, hdc);
+    ReleaseDC(hWnd, hdc2);
 }
 
 //  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
@@ -362,20 +335,19 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
     case WM_CREATE:
     {
-        /*
+        
         HANDLE thread = CreateThread(NULL, 0, PaintProc, (LPVOID) hWnd, 0, NULL);
         if (!thread) {
             WaitForSingleObject(thread, INFINITE);
         }
-        */
+        
     }
     break;
     case WM_PAINT:
     {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
-        //CaptureAnImage(hWnd);
-        screenshot(hdc);
+        screenshot(hWnd);
         EndPaint(hWnd, &ps);
         
     }
@@ -394,7 +366,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 DWORD WINAPI PaintProc(LPVOID lpParam) {
     while (1) {
         HWND hWnd = (HWND)lpParam;
-
         SendMessage(hWnd, WM_PAINT, NULL, NULL);
         Sleep(30);
     }
