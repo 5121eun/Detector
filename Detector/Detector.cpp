@@ -248,7 +248,8 @@ int WINAPI WinMain(
     GetWindowText(hwnd, wcstoul(wnd_title), sizeof(wnd_title));
     */
 
-
+    RECT rcWindow;
+    GetWindowRect(last, &rcWindow);
 
     // The parameters to CreateWindowEx explained:
     // WS_EX_OVERLAPPEDWINDOW : An optional extended window style.
@@ -267,7 +268,7 @@ int WINAPI WinMain(
         szTitle,
         WS_OVERLAPPEDWINDOW,
         //CW_USEDEFAULT, CW_USEDEFAULT,
-        1000, 300,
+        rcWindow.left, rcWindow.top,
         500, 500,
         NULL,
         NULL,
@@ -306,17 +307,17 @@ int WINAPI WinMain(
 
 void screenshot(HWND hWnd)
 {
-    RECT rcClient;
-    GetWindowRect(hWnd, &rcClient);
-    auto w = rcClient.right - rcClient.left;
-    auto h = rcClient.bottom - rcClient.top;
+    RECT rcWindow;
+    GetWindowRect(hWnd, &rcWindow);
+    auto w = rcWindow.right - rcWindow.left;
+    auto h = rcWindow.bottom - rcWindow.top;
 
     auto hdc = GetDC(last);
     auto hdc2 = GetDC(hWnd);
     auto hbitmap = CreateCompatibleBitmap(hdc, w, h);
     auto memdc = CreateCompatibleDC(hdc);
     auto oldbmp = SelectObject(memdc, hbitmap);
-    BitBlt(memdc, 0, 0, w, h, hdc, rcClient.left, rcClient.top, SRCCOPY);
+    BitBlt(memdc, 0, 0, w, h, hdc, rcWindow.left, rcWindow.top + 32, SRCCOPY);
 
     cv::Mat mat(h, w, CV_8UC4);
     BITMAPINFOHEADER bi = { sizeof(bi), w, -h, 1, 32, BI_RGB };
@@ -354,10 +355,8 @@ int CaptureAnImage(HWND hWnd)
 
     // Retrieve the handle to a display device context for the client 
     // area of the window. 
-    //HWND last = GetWindow(hWnd, GW_HWNDLAST);
-    //HWND last2 = GetWindow(last, GW_HWNDNEXT);
-
-    //HWND last2 = FindWindowExA(NULL, last, 0, NULL);
+    //hdcScreen = GetDC(last);
+    auto last2 = GetWindow(hWnd, GW_HWNDLAST);
     hdcScreen = GetDC(last);
     hdcWindow = GetDC(hWnd);
 
@@ -371,14 +370,17 @@ int CaptureAnImage(HWND hWnd)
     }
 
     // Get the client area for size calculation.
+    RECT rcWindow;
     RECT rcClient;
-    GetWindowRect(hWnd, &rcClient);
+    GetWindowRect(hWnd, &rcWindow);
+    GetClientRect(hWnd, &rcClient);
 
-    // This is the best stretch mode.
-    SetStretchBltMode(hdcWindow, HALFTONE);
-
+    //wchar_t buffer[256];
+    //wsprintfW(buffer, L"%d, %d, %d\n", rcClient.bottom, rcWindow.bottom - rcWindow.top, rcClient.bottom + (rcWindow.bottom - rcWindow.top) - rcClient.bottom);
+    //OutputDebugString(buffer);
+    
     // The source DC is the entire screen, and the destination DC is the current window (HWND).
-    if (!BitBlt(hdcWindow, 0, 0, rcClient.right - rcClient.left, rcClient.bottom - rcClient.top, hdcScreen, rcClient.left, rcClient.top, SRCCOPY))
+    if (!BitBlt(hdcWindow, 0, 0, rcClient.right, rcClient.bottom, hdcScreen, rcWindow.left, rcWindow.top + 32, SRCCOPY))
     {
         MessageBox(hWnd, L"StretchBlt has failed", L"Failed", MB_OK);
         goto done;
@@ -419,8 +421,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
         
-        //CaptureAnImage(hWnd);
-        screenshot(hWnd);
+        CaptureAnImage(hWnd);
+        //screenshot(hWnd);
         EndPaint(hWnd, &ps);
         
     }
@@ -440,7 +442,7 @@ DWORD WINAPI PaintProc(LPVOID lpParam) {
     while (1) {
         HWND hWnd = (HWND)lpParam;
         SendMessage(hWnd, WM_PAINT, NULL, NULL);
-        Sleep(300);
+        Sleep(100);
     }
     return 0;
 }
