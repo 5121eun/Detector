@@ -25,6 +25,7 @@ static TCHAR szTitle[] = _T("Detector");
 
 // Stored instance handle for use in Win32 API calls such as FindResource
 HINSTANCE hInst;
+HWND last;
 
 // Forward declarations of functions included in this code module:
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -238,6 +239,16 @@ int WINAPI WinMain(
 
     // Store instance handle in our global variable
     hInst = hInstance;
+    last = GetForegroundWindow();
+    /*
+    
+    hwndTop = GetTopWindow(NULL);
+    char wnd_title[256];
+    HWND hwnd = GetForegroundWindow();
+    GetWindowText(hwnd, wcstoul(wnd_title), sizeof(wnd_title));
+    */
+
+
 
     // The parameters to CreateWindowEx explained:
     // WS_EX_OVERLAPPEDWINDOW : An optional extended window style.
@@ -280,7 +291,7 @@ int WINAPI WinMain(
     ShowWindow(hWnd,
         nCmdShow);
     UpdateWindow(hWnd);
-
+    
     // Main message loop:
     MSG msg;
     
@@ -295,14 +306,17 @@ int WINAPI WinMain(
 
 void screenshot(HWND hWnd)
 {
-    auto w = GetSystemMetrics(SM_CXFULLSCREEN);
-    auto h = GetSystemMetrics(SM_CYFULLSCREEN);
-    auto hdc = GetDC(HWND_DESKTOP);
+    RECT rcClient;
+    GetWindowRect(hWnd, &rcClient);
+    auto w = rcClient.right - rcClient.left;
+    auto h = rcClient.bottom - rcClient.top;
+
+    auto hdc = GetDC(last);
     auto hdc2 = GetDC(hWnd);
     auto hbitmap = CreateCompatibleBitmap(hdc, w, h);
     auto memdc = CreateCompatibleDC(hdc);
     auto oldbmp = SelectObject(memdc, hbitmap);
-    BitBlt(memdc, 0, 0, w, h, hdc, 0, 0, SRCCOPY);
+    BitBlt(memdc, 0, 0, w, h, hdc, rcClient.left, rcClient.top, SRCCOPY);
 
     cv::Mat mat(h, w, CV_8UC4);
     BITMAPINFOHEADER bi = { sizeof(bi), w, -h, 1, 32, BI_RGB };
@@ -321,6 +335,63 @@ Done:
     DeleteObject(hbitmap);
     ReleaseDC(HWND_DESKTOP, hdc);
     ReleaseDC(hWnd, hdc2);
+}
+
+
+int CaptureAnImage(HWND hWnd)
+{
+    HDC hdcScreen;
+    HDC hdcWindow;
+    HDC hdcMemDC = NULL;
+    HBITMAP hbmScreen = NULL;
+    BITMAP bmpScreen;
+    DWORD dwBytesWritten = 0;
+    DWORD dwSizeofDIB = 0;
+    HANDLE hFile = NULL;
+    char* lpbitmap = NULL;
+    HANDLE hDIB = NULL;
+    DWORD dwBmpSize = 0;
+
+    // Retrieve the handle to a display device context for the client 
+    // area of the window. 
+    //HWND last = GetWindow(hWnd, GW_HWNDLAST);
+    //HWND last2 = GetWindow(last, GW_HWNDNEXT);
+
+    //HWND last2 = FindWindowExA(NULL, last, 0, NULL);
+    hdcScreen = GetDC(last);
+    hdcWindow = GetDC(hWnd);
+
+    // Create a compatible DC, which is used in a BitBlt from the window DC.
+    hdcMemDC = CreateCompatibleDC(hdcWindow);
+
+    if (!hdcMemDC)
+    {
+        MessageBox(hWnd, L"CreateCompatibleDC has failed", L"Failed", MB_OK);
+        goto done;
+    }
+
+    // Get the client area for size calculation.
+    RECT rcClient;
+    GetWindowRect(hWnd, &rcClient);
+
+    // This is the best stretch mode.
+    SetStretchBltMode(hdcWindow, HALFTONE);
+
+    // The source DC is the entire screen, and the destination DC is the current window (HWND).
+    if (!BitBlt(hdcWindow, 0, 0, rcClient.right - rcClient.left, rcClient.bottom - rcClient.top, hdcScreen, rcClient.left, rcClient.top, SRCCOPY))
+    {
+        MessageBox(hWnd, L"StretchBlt has failed", L"Failed", MB_OK);
+        goto done;
+    }
+
+    // Clean up.
+done:
+    DeleteObject(hbmScreen);
+    DeleteObject(hdcMemDC);
+    ReleaseDC(NULL, hdcScreen);
+    ReleaseDC(hWnd, hdcWindow);
+
+    return 0;
 }
 
 //  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
@@ -347,6 +418,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
+        
+        //CaptureAnImage(hWnd);
         screenshot(hWnd);
         EndPaint(hWnd, &ps);
         
@@ -367,7 +440,7 @@ DWORD WINAPI PaintProc(LPVOID lpParam) {
     while (1) {
         HWND hWnd = (HWND)lpParam;
         SendMessage(hWnd, WM_PAINT, NULL, NULL);
-        Sleep(30);
+        Sleep(300);
     }
     return 0;
 }
