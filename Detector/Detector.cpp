@@ -31,7 +31,7 @@ HWND last;
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 DWORD   WINAPI      PaintProc(LPVOID lpParam);
 
-#define MODEL_PATH "detr.pt"
+#define MODEL_PATH "yolo.pt"
 
 class Detector {
 private:
@@ -133,7 +133,7 @@ private:
     std::vector<torch::jit::IValue> preprocessing(cv::Mat src) {
         cv::Mat reszied_img;
         cv::cvtColor(src, src, cv::COLOR_RGBA2RGB);
-        cv::resize(src, reszied_img, cv::Size(800, 800), 0, 0, 1);
+        cv::resize(src, reszied_img, cv::Size(256, 256), 0, 0, 1);
 
         auto input = torch::from_blob(reszied_img.data, { reszied_img.rows, reszied_img.cols, reszied_img.channels() }, torch::kUInt8);
 
@@ -179,7 +179,7 @@ private:
 
 public:
     Detector() {
-        model = torch::jit::load("detr.pt");
+        model = torch::jit::load(MODEL_PATH);
     }
 
     cv::Mat detect(cv::Mat src) {
@@ -317,14 +317,15 @@ void screenshot(HWND hWnd)
     auto hbitmap = CreateCompatibleBitmap(hdc, w, h);
     auto memdc = CreateCompatibleDC(hdc);
     auto oldbmp = SelectObject(memdc, hbitmap);
-    BitBlt(memdc, 0, 0, w, h, hdc, rcWindow.left, rcWindow.top + 32, SRCCOPY);
+    BitBlt(memdc, 0, 0, w, h, hdc, rcWindow.left+10, rcWindow.top + 32, SRCCOPY);
 
     cv::Mat mat(h, w, CV_8UC4);
     BITMAPINFOHEADER bi = { sizeof(bi), w, -h, 1, 32, BI_RGB };
     GetDIBits(hdc, hbitmap, 0, h, mat.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
     cv::Mat result = detector.detect(mat);
+    //cv::Mat result = mat;
 
-    //cv::imshow("image", result);
+    //cv::imshow("image", mat);
     //cv::waitKey(0);
 
     SetDIBitsToDevice(hdc2, 0, 0, result.cols, result.rows, 0, 0, 0, result.rows,
@@ -336,64 +337,6 @@ Done:
     DeleteObject(hbitmap);
     ReleaseDC(HWND_DESKTOP, hdc);
     ReleaseDC(hWnd, hdc2);
-}
-
-
-int CaptureAnImage(HWND hWnd)
-{
-    HDC hdcScreen;
-    HDC hdcWindow;
-    HDC hdcMemDC = NULL;
-    HBITMAP hbmScreen = NULL;
-    BITMAP bmpScreen;
-    DWORD dwBytesWritten = 0;
-    DWORD dwSizeofDIB = 0;
-    HANDLE hFile = NULL;
-    char* lpbitmap = NULL;
-    HANDLE hDIB = NULL;
-    DWORD dwBmpSize = 0;
-
-    // Retrieve the handle to a display device context for the client 
-    // area of the window. 
-    //hdcScreen = GetDC(last);
-    auto last2 = GetWindow(hWnd, GW_HWNDLAST);
-    hdcScreen = GetDC(last);
-    hdcWindow = GetDC(hWnd);
-
-    // Create a compatible DC, which is used in a BitBlt from the window DC.
-    hdcMemDC = CreateCompatibleDC(hdcWindow);
-
-    if (!hdcMemDC)
-    {
-        MessageBox(hWnd, L"CreateCompatibleDC has failed", L"Failed", MB_OK);
-        goto done;
-    }
-
-    // Get the client area for size calculation.
-    RECT rcWindow;
-    RECT rcClient;
-    GetWindowRect(hWnd, &rcWindow);
-    GetClientRect(hWnd, &rcClient);
-
-    //wchar_t buffer[256];
-    //wsprintfW(buffer, L"%d, %d, %d\n", rcClient.bottom, rcWindow.bottom - rcWindow.top, rcClient.bottom + (rcWindow.bottom - rcWindow.top) - rcClient.bottom);
-    //OutputDebugString(buffer);
-    
-    // The source DC is the entire screen, and the destination DC is the current window (HWND).
-    if (!BitBlt(hdcWindow, 0, 0, rcClient.right, rcClient.bottom, hdcScreen, rcWindow.left, rcWindow.top + 32, SRCCOPY))
-    {
-        MessageBox(hWnd, L"StretchBlt has failed", L"Failed", MB_OK);
-        goto done;
-    }
-
-    // Clean up.
-done:
-    DeleteObject(hbmScreen);
-    DeleteObject(hdcMemDC);
-    ReleaseDC(NULL, hdcScreen);
-    ReleaseDC(hWnd, hdcWindow);
-
-    return 0;
 }
 
 //  FUNCTION: WndProc(HWND, UINT, WPARAM, LPARAM)
@@ -420,9 +363,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hWnd, &ps);
-        
-        CaptureAnImage(hWnd);
-        //screenshot(hWnd);
+        screenshot(hWnd);
         EndPaint(hWnd, &ps);
         
     }
@@ -442,7 +383,7 @@ DWORD WINAPI PaintProc(LPVOID lpParam) {
     while (1) {
         HWND hWnd = (HWND)lpParam;
         SendMessage(hWnd, WM_PAINT, NULL, NULL);
-        Sleep(100);
+        Sleep(40);
     }
     return 0;
 }
