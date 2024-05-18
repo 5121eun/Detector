@@ -31,104 +31,11 @@ HWND last;
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 DWORD   WINAPI      PaintProc(LPVOID lpParam);
 
-#define MODEL_PATH "yolo.pt"
+#define MODEL_PATH "cat_seg_mob_traend_5.pt"
 
 class Detector {
 private:
     torch::jit::script::Module model;
-    std::string keys[91] = {
-     "N/A",
-     "person",
-     "bicycle",
-     "car",
-     "motorcycle",
-     "airplane",
-     "bus",
-     "train",
-     "truck",
-     "boat",
-     "traffic light",
-     "fire hydrant",
-     "N/A",
-     "stop sign",
-     "parking meter",
-     "bench",
-     "bird",
-     "cat",
-     "dog",
-     "horse",
-     "sheep",
-     "cow",
-     "elephant",
-     "bear",
-     "zebra",
-     "giraffe",
-     "N/A",
-     "backpack",
-     "umbrella",
-     "N/A",
-     "N/A",
-     "handbag",
-     "tie",
-     "suitcase",
-     "frisbee",
-     "skis",
-     "snowboard",
-     "sports ball",
-     "kite",
-     "baseball bat",
-     "baseball glove",
-     "skateboard",
-     "surfboard",
-     "tennis racket",
-     "bottle",
-     "N/A",
-     "wine glass",
-     "cup",
-     "fork",
-     "knife",
-     "spoon",
-     "bowl",
-     "banana",
-     "apple",
-     "sandwich",
-     "orange",
-     "broccoli",
-     "carrot",
-     "hot dog",
-     "pizza",
-     "donut",
-     "cake",
-     "chair",
-     "couch",
-     "potted plant",
-     "bed",
-     "N/A",
-     "dining table",
-     "N/A",
-     "N/A",
-     "toilet",
-     "N/A",
-     "tv",
-     "laptop",
-     "mouse",
-     "remote",
-     "keyboard",
-     "cell phone",
-     "microwave",
-     "oven",
-     "toaster",
-     "sink",
-     "refrigerator",
-     "N/A",
-     "book",
-     "clock",
-     "vase",
-     "scissors",
-     "teddy bear",
-     "hair drier",
-     "toothbrush"
-    };
 
     std::vector<torch::jit::IValue> preprocessing(cv::Mat src) {
         cv::Mat reszied_img;
@@ -140,41 +47,28 @@ private:
         auto mean = torch::tensor({ { 0.485, 0.456, 0.406 } });
         auto std = torch::tensor({ { 0.229, 0.224, 0.225 } });
 
-
         input = input / 255;
         input = (input - mean) / std;
 
-        input = input.permute({ 2, 0, 1 }).unsqueeze(0).type_as(torch::ones({ 1 }));
+        input = input.permute({ 2, 0, 1 }).unsqueeze(0).toType(torch::kFloat32);
+
         std::vector<torch::jit::IValue> inputs;
         inputs.push_back(input);
 
         return inputs;
     }
 
-    void draw(cv::Mat src, at::Tensor logits, at::Tensor bboxes) {
-        int width = src.cols;
-        int height = src.rows;
+    cv::Mat draw(cv::Mat src, at::Tensor mask) {
 
-        for (int i = 0; i < 100; i++) {
-            auto cls_idx = logits[i].argmax().item().toInt();
+        cv::Mat mat = cv::Mat(mask.sizes()[0], mask.sizes()[1], CV_8U, mask.data_ptr<uchar>());
+        mat = mat * 255;
+        cv::resize(mat, mat, cv::Size(src.rows, src.cols), 0, 0, 1);
+        cv::cvtColor(mat, mat, cv::COLOR_GRAY2RGBA);
 
-            if (cls_idx == 91) {
-                continue;
-            }
+        cv::bitwise_and(src, mat, src);
 
-            auto cls = keys[cls_idx];
-            std::cout << cls << "\n";
+        return src;
 
-            float center_x = bboxes[i][0].item().toFloat() * width;
-            float center_y = bboxes[i][1].item().toFloat() * height;
-
-            float w = bboxes[i][2].item().toFloat() * width;
-            float h = bboxes[i][3].item().toFloat() * height;
-
-            cv::putText(src, cls, cv::Point2f(center_x - (w / 2), center_y - (h / 2)), 0, 1, cv::Scalar(255), 2);
-            cv::rectangle(src, cv::Point2f(center_x - (w / 2), center_y - (h / 2)), cv::Point2f(center_x + (w / 2), center_y + (h / 2)), cv::Scalar(255), 2);
-
-        }
     }
 
 public:
@@ -184,16 +78,13 @@ public:
 
     cv::Mat detect(cv::Mat src) {
         std::vector<torch::jit::IValue> inputs = preprocessing(src);
-
         try {
             
             auto output = model.forward(inputs);
-            auto logits = output.toTuple()->elements()[0].toTensor()[0];
-            auto bboxes = output.toTuple()->elements()[1].toTensor()[0];
+            auto logits = output.toTensor()[0].sigmoid()[0].to(torch::kU8);
 
-            draw(src, logits, bboxes);
-            
-            return src;
+            cv::Mat mask = draw(src, logits);
+            return mask;
         }
         catch (const c10::Error& e) {
             std::cerr << e.what();
@@ -240,13 +131,6 @@ int WINAPI WinMain(
     // Store instance handle in our global variable
     hInst = hInstance;
     last = GetForegroundWindow();
-    /*
-    
-    hwndTop = GetTopWindow(NULL);
-    char wnd_title[256];
-    HWND hwnd = GetForegroundWindow();
-    GetWindowText(hwnd, wcstoul(wnd_title), sizeof(wnd_title));
-    */
 
     RECT rcWindow;
     GetWindowRect(last, &rcWindow);
@@ -323,10 +207,6 @@ void screenshot(HWND hWnd)
     BITMAPINFOHEADER bi = { sizeof(bi), w, -h, 1, 32, BI_RGB };
     GetDIBits(hdc, hbitmap, 0, h, mat.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
     cv::Mat result = detector.detect(mat);
-    //cv::Mat result = mat;
-
-    //cv::imshow("image", mat);
-    //cv::waitKey(0);
 
     SetDIBitsToDevice(hdc2, 0, 0, result.cols, result.rows, 0, 0, 0, result.rows,
         result.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
@@ -383,7 +263,7 @@ DWORD WINAPI PaintProc(LPVOID lpParam) {
     while (1) {
         HWND hWnd = (HWND)lpParam;
         SendMessage(hWnd, WM_PAINT, NULL, NULL);
-        Sleep(40);
+        Sleep(50);
     }
     return 0;
 }
