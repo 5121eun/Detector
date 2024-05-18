@@ -58,17 +58,19 @@ private:
         return inputs;
     }
 
-    cv::Mat draw(cv::Mat src, at::Tensor mask) {
+    void draw(cv::Mat src, at::Tensor mask) {
 
-        cv::Mat mat = cv::Mat(mask.sizes()[0], mask.sizes()[1], CV_8U, mask.data_ptr<uchar>());
-        mat = mat * 255;
-        cv::resize(mat, mat, cv::Size(src.rows, src.cols), 0, 0, 1);
-        cv::cvtColor(mat, mat, cv::COLOR_GRAY2RGBA);
+        try {
+            cv::Mat mat = cv::Mat(mask.sizes()[0], mask.sizes()[1], CV_8U, mask.data_ptr<uchar>());
+            mat = mat * 255;
+            cv::resize(mat, mat, cv::Size(src.rows, src.cols), 0, 0, 1);
+            cv::cvtColor(mat, mat, cv::COLOR_GRAY2RGBA);
 
-        cv::bitwise_and(src, mat, src);
-
-        return src;
-
+            cv::bitwise_and(src, mat, src);
+        }
+        catch (cv::Exception e) {
+            std::cerr << e.what();
+        }
     }
 
 public:
@@ -76,17 +78,19 @@ public:
         model = torch::jit::load(MODEL_PATH);
     }
 
-    cv::Mat detect(cv::Mat src) {
+    void detect(cv::Mat src) {
         std::vector<torch::jit::IValue> inputs = preprocessing(src);
         try {
             
             auto output = model.forward(inputs);
             auto logits = output.toTensor()[0].sigmoid()[0].to(torch::kU8);
 
-            cv::Mat mask = draw(src, logits);
-            return mask;
+            draw(src, logits);
         }
         catch (const c10::Error& e) {
+            std::cerr << e.what();
+        }
+        catch (cv::Exception e) {
             std::cerr << e.what();
         }
         
@@ -153,7 +157,7 @@ int WINAPI WinMain(
         WS_OVERLAPPEDWINDOW,
         //CW_USEDEFAULT, CW_USEDEFAULT,
         rcWindow.left, rcWindow.top,
-        500, 500,
+        700, 700,
         NULL,
         NULL,
         hInstance,
@@ -206,10 +210,10 @@ void screenshot(HWND hWnd)
     cv::Mat mat(h, w, CV_8UC4);
     BITMAPINFOHEADER bi = { sizeof(bi), w, -h, 1, 32, BI_RGB };
     GetDIBits(hdc, hbitmap, 0, h, mat.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
-    cv::Mat result = detector.detect(mat);
+    detector.detect(mat);
 
-    SetDIBitsToDevice(hdc2, 0, 0, result.cols, result.rows, 0, 0, 0, result.rows,
-        result.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
+    SetDIBitsToDevice(hdc2, 0, 0, mat.cols, mat.rows, 0, 0, 0, mat.rows,
+        mat.data, (BITMAPINFO*)&bi, DIB_RGB_COLORS);
 
 Done:
     SelectObject(memdc, oldbmp);
@@ -263,7 +267,7 @@ DWORD WINAPI PaintProc(LPVOID lpParam) {
     while (1) {
         HWND hWnd = (HWND)lpParam;
         SendMessage(hWnd, WM_PAINT, NULL, NULL);
-        Sleep(50);
+        Sleep(25);
     }
     return 0;
 }
