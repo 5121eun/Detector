@@ -62,11 +62,14 @@ private:
 
         try {
             cv::Mat mat = cv::Mat(mask.sizes()[0], mask.sizes()[1], CV_8U, mask.data_ptr<uchar>());
-            mat = mat * 255;
             cv::resize(mat, mat, cv::Size(src.rows, src.cols), 0, 0, 1);
             cv::cvtColor(mat, mat, cv::COLOR_GRAY2RGBA);
-
-            cv::bitwise_and(src, mat, src);
+            
+            cv::Mat mask;
+            inRange(mat, cv::Scalar(1, 1, 1, 255), cv::Scalar(1, 1, 1, 255), mask);
+            mat.setTo(cv::Scalar(255, 0, 0, 100), mask);
+            
+            cv::bitwise_or(src, mat, src);
         }
         catch (cv::Exception e) {
             std::cerr << e.what();
