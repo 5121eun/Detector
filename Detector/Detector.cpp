@@ -31,7 +31,7 @@ HWND last;
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 DWORD   WINAPI      PaintProc(LPVOID lpParam);
 
-#define MODEL_PATH "cat_seg_mob_traend_5.pt"
+#define MODEL_PATH "pet_seg_mob.pt"
 
 class Detector {
 private:
@@ -157,7 +157,7 @@ int WINAPI WinMain(
         WS_OVERLAPPEDWINDOW,
         //CW_USEDEFAULT, CW_USEDEFAULT,
         rcWindow.left, rcWindow.top,
-        700, 700,
+        500, 500,
         NULL,
         NULL,
         hInstance,
