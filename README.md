@@ -1,5 +1,5 @@
 # Pet Detector
-https://github.com/5121eun/Detector/assets/121006954/7ef62112-4b0d-4bbc-a69c-fe8688000d61
+![detector](https://github.com/5121eun/Detector/assets/121006954/36d2792c-cffb-4800-9c04-4558c57f8d5b)
 
 # Description
  - [Pet Detctor](https://github.com/5121eun/Detector/blob/master/Detector/pet_detector.pptx)
